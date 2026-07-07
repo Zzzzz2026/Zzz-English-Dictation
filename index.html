@@ -357,21 +357,35 @@ async function transcribeAudio(file) {
   try {
     transcribeStatus.innerHTML = '<span class="status-badge status-processing"><span class="spinner"></span> Loading model (first time may take 1-2 min)…</span>';
 
-    // Dynamically import transformers.js
     const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js');
     env.allowLocalModels = false;
 
     const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-small');
 
-    transcribeStatus.innerHTML = '<span class="status-badge status-processing"><span class="spinner"></span> Transcribing…</span>';
+    transcribeStatus.innerHTML = '<span class="status-badge status-processing"><span class="spinner"></span> Transcribing full audio…</span>';
 
     const arrayBuffer = await file.arrayBuffer();
     const audioContext = new AudioContext({ sampleRate: 16000 });
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
     const float32 = audioBuffer.getChannelData(0);
 
-    const result = await transcriber(float32, { language: 'english', task: 'transcribe' });
-    transcriptText = result.text?.trim() || '';
+    // Process full audio with chunking for long files
+    const result = await transcriber(float32, {
+      language: 'english',
+      task: 'transcribe',
+      chunk_length_s: 30,
+      stride_length_s: 5,
+      return_timestamps: false
+    });
+
+    // Handle both single result and chunked result
+    let raw = '';
+    if(Array.isArray(result)) {
+      raw = result.map(r => r.text || '').join(' ');
+    } else {
+      raw = result.text || '';
+    }
+    transcriptText = raw.trim().replace(/\s+/g, ' ');
     if(!transcriptText) throw new Error('Empty result');
 
     transcribeStatus.innerHTML = '<span class="status-badge status-ready">✓ Ready</span>';
@@ -491,7 +505,16 @@ newFileBtn.addEventListener('click', resetToUpload);
 
 // ── SHADOWING ──────────────────────────────────────────
 function splitSentences(text) {
-  return text.match(/[^.!?]+[.!?]*/g)?.map(s=>s.trim()).filter(s=>s.length>2)||[text];
+  // Split on sentence-ending punctuation, or every ~15 words if no punctuation
+  const byPunct = text.match(/[^.!?]+[.!?]*/g)?.map(s=>s.trim()).filter(s=>s.length>2);
+  if(byPunct && byPunct.length > 1) return byPunct;
+  // Fallback: split every 15 words
+  const words = text.split(/\s+/);
+  const chunks = [];
+  for(let i=0; i<words.length; i+=15) {
+    chunks.push(words.slice(i,i+15).join(' '));
+  }
+  return chunks.filter(c=>c.length>2);
 }
 
 function startShadow() {
