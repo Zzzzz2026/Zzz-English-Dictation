@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dictation Practice</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --border: #2a2d3e;
+    --accent: #4f8ef7; --accent2: #a78bfa; --text: #e8eaf0;
+    --muted: #6b7080; --correct: #34d399; --wrong: #f87171;
+    --blank-bg: #1e2235; --blank-border: #3a4060;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:32px 16px 64px; }
+  header { text-align:center; margin-bottom:40px; }
+  header h1 { font-family:'IBM Plex Mono',monospace; font-size:1.5rem; font-weight:600; letter-spacing:-0.02em; }
+  header h1 span { color:var(--accent); }
+  header p { color:var(--muted); font-size:0.85rem; margin-top:6px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:28px; width:100%; max-width:720px; margin-bottom:20px; }
+  .card-title { font-size:0.7rem; font-family:'IBM Plex Mono',monospace; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-bottom:16px; }
+  .upload-area { border:2px dashed var(--border); border-radius:8px; padding:32px; text-align:center; cursor:pointer; transition:border-color 0.2s,background 0.2s; }
+  .upload-area:hover,.upload-area.dragover { border-color:var(--accent); background:rgba(79,142,247,0.05); }
+  .upload-area input { display:none; }
+  .upload-icon { font-size:2rem; margin-bottom:8px; }
+  .upload-area p { color:var(--muted); font-size:0.875rem; }
+  .upload-area p strong { color:var(--accent); }
+  .controls-row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  label.ctrl-label { font-size:0.8rem; color:var(--muted); margin-bottom:6px; display:block; }
+  .ctrl-group { flex:1; min-width:140px; }
+  select,input[type=range] { width:100%; }
+  select { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:6px; font-size:0.875rem; font-family:'Inter',sans-serif; appearance:none; cursor:pointer; }
+  .slider-wrapper { display:flex; align-items:center; gap:10px; }
+  input[type=range] { accent-color:var(--accent); cursor:pointer; }
+  .slider-val { font-family:'IBM Plex Mono',monospace; font-size:0.875rem; color:var(--accent); min-width:36px; text-align:right; }
+  .btn { display:inline-flex; align-items:center; gap:6px; padding:9px 18px; border-radius:7px; border:none; font-family:'Inter',sans-serif; font-size:0.875rem; font-weight:500; cursor:pointer; transition:opacity 0.15s,transform 0.1s; }
+  .btn:active { transform:scale(0.97); }
+  .btn:disabled { opacity:0.4; cursor:default; }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-secondary { background:var(--border); color:var(--text); }
+  .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--muted); padding:6px 12px; font-size:0.8rem; }
+  .btn-ghost:hover { border-color:var(--accent); color:var(--accent); }
+  .btn-purple { background:var(--accent2); color:#fff; }
+  .audio-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .play-btn { width:44px; height:44px; border-radius:50%; background:var(--accent); border:none; color:#fff; font-size:1.1rem; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:opacity 0.15s; }
+  .play-btn:hover { opacity:0.85; }
+  .audio-progress { flex:1; height:4px; background:var(--border); border-radius:2px; overflow:hidden; min-width:80px; }
+  .audio-progress-fill { height:100%; background:var(--accent); width:0%; transition:width 0.1s linear; }
+  .audio-time { font-family:'IBM Plex Mono',monospace; font-size:0.75rem; color:var(--muted); min-width:60px; }
+  .status-badge { display:inline-flex; align-items:center; gap:6px; font-size:0.75rem; padding:4px 10px; border-radius:20px; font-family:'IBM Plex Mono',monospace; }
+  .status-processing { background:rgba(167,139,250,0.15); color:var(--accent2); }
+  .status-ready { background:rgba(52,211,153,0.15); color:var(--correct); }
+  .status-error { background:rgba(248,113,113,0.15); color:var(--wrong); }
+  .spinner { width:10px; height:10px; border:2px solid currentColor; border-top-color:transparent; border-radius:50%; animation:spin 0.7s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .dictation-text { font-size:1.05rem; line-height:2.2; font-family:'Inter',sans-serif; }
+  .dictation-text .word-blank { display:inline-block; position:relative; margin:0 2px; }
+  .dictation-text input.blank-input { font-family:'IBM Plex Mono',monospace; font-size:0.9rem; background:var(--blank-bg); border:1px solid var(--blank-border); border-bottom:2px solid var(--accent); color:var(--text); border-radius:4px 4px 0 0; padding:2px 6px; outline:none; transition:border-color 0.15s,background 0.15s; min-width:60px; }
+  .dictation-text input.blank-input:focus { border-color:var(--accent); background:rgba(79,142,247,0.08); }
+  .dictation-text input.blank-input.correct { border-bottom-color:var(--correct); background:rgba(52,211,153,0.08); color:var(--correct); }
+  .dictation-text input.blank-input.wrong { border-bottom-color:var(--wrong); background:rgba(248,113,113,0.08); color:var(--wrong); }
+  .dictation-text .word-visible { color:var(--text); }
+  .result-line { display:flex; align-items:baseline; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); font-size:0.875rem; }
+  .result-line:last-child { border-bottom:none; }
+  .result-word { font-family:'IBM Plex Mono',monospace; }
+  .result-correct { color:var(--correct); }
+  .result-wrong { color:var(--wrong); }
+  .result-arrow { color:var(--muted); font-size:0.75rem; }
+  .score-display { text-align:center; padding:20px 0 8px; }
+  .score-num { font-family:'IBM Plex Mono',monospace; font-size:2.5rem; font-weight:600; color:var(--accent); }
+  .score-label { font-size:0.8rem; color:var(--muted); margin-top:4px; }
+  .full-text-reveal { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:16px; font-size:0.9rem; line-height:1.8; color:var(--muted); margin-top:16px; }
+  .full-text-reveal strong { color:var(--text); }
+  .transcript-preview { font-size:0.85rem; color:var(--muted); line-height:1.7; max-height:80px; overflow:hidden; mask-image:linear-gradient(to bottom,black 60%,transparent); margin-top:10px; }
+  .section-divider { display:flex; align-items:center; gap:12px; margin:4px 0 16px; }
+  .section-divider hr { flex:1; border:none; border-top:1px solid var(--border); }
+  .section-divider span { font-size:0.7rem; color:var(--muted); font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:0.08em; }
+  .btn-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:20px; }
+  audio { display:none; }
+
+  /* Mode tabs */
+  .mode-tabs { display:flex; gap:8px; margin-bottom:20px; }
+  .mode-tab { flex:1; padding:10px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--muted); font-family:'Inter',sans-serif; font-size:0.85rem; cursor:pointer; text-align:center; transition:all 0.15s; }
+  .mode-tab.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .mode-tab.active-purple { background:var(--accent2); border-color:var(--accent2); color:#fff; }
+
+  /* Shadowing */
+  .sentence-card { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:16px 18px; margin-bottom:10px; transition:border-color 0.2s; }
+  .sentence-card.active { border-color:var(--accent2); }
+  .sentence-card.done-good { border-color:var(--correct); }
+  .sentence-card.done-ok { border-color:#f59e0b; }
+  .sentence-text { font-size:1rem; line-height:1.7; margin-bottom:10px; color:var(--text); }
+  .sentence-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .mic-btn { width:38px; height:38px; border-radius:50%; border:2px solid var(--accent2); background:transparent; color:var(--accent2); font-size:1rem; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.15s,color 0.15s; flex-shrink:0; }
+  .mic-btn.recording { background:var(--wrong); border-color:var(--wrong); color:#fff; animation:pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;}50%{opacity:0.6;} }
+  .word-chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:8px; }
+  .chip { padding:2px 7px; border-radius:4px; font-family:'IBM Plex Mono',monospace; font-size:0.78rem; }
+  .chip-hit { background:rgba(52,211,153,0.15); color:var(--correct); }
+  .chip-miss { background:rgba(248,113,113,0.12); color:var(--wrong); }
+  .sentence-score-badge { font-family:'IBM Plex Mono',monospace; font-size:0.8rem; padding:3px 10px; border-radius:20px; }
+  .score-good { background:rgba(52,211,153,0.15); color:var(--correct); }
+  .score-ok { background:rgba(245,158,11,0.15); color:#f59e0b; }
+  .score-bad { background:rgba(248,113,113,0.15); color:var(--wrong); }
+  .shadow-summary { text-align:center; padding:12px 0; }
+  .shadow-summary .big { font-family:'IBM Plex Mono',monospace; font-size:2rem; font-weight:600; color:var(--accent2); }
+  .no-speech-note { font-size:0.78rem; color:var(--muted); background:rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.2); border-radius:6px; padding:10px 14px; margin-bottom:16px; line-height:1.6; }
+
+  .hidden { display:none !important; }
+  @media(max-width:480px){ .controls-row{flex-direction:column;} .ctrl-group{width:100%;} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Dictation <span>//</span> Practice</h1>
+  <p>Upload audio · fill blanks · shadow & repeat</p>
+</header>
+
+<!-- Step 1: Upload -->
+<div class="card" id="uploadCard">
+  <div class="card-title">01 — Upload Audio</div>
+  <div class="upload-area" id="dropZone">
+    <input type="file" id="audioFile" accept="audio/*">
+    <div class="upload-icon">🎧</div>
+    <p><strong>Click to upload</strong> or drag & drop</p>
+    <p>MP3, WAV, M4A, OGG supported</p>
+  </div>
+  <div id="fileInfo" class="hidden" style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span id="fileName" style="font-size:0.85rem;color:var(--text);"></span>
+    <span id="transcribeStatus"></span>
+    <button class="btn btn-ghost" id="changeFileBtn">Change file</button>
+  </div>
+  <div id="transcriptPreview" class="transcript-preview hidden"></div>
+  <div style="margin-top:16px;background:rgba(79,142,247,0.06);border:1px solid rgba(79,142,247,0.2);border-radius:8px;padding:14px 16px;">
+    <div style="font-size:0.7rem;font-family:'IBM Plex Mono',monospace;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;">▶ Using a YouTube video?</div>
+    <p style="font-size:0.82rem;color:var(--muted);line-height:1.7;">
+      Download the audio first, then upload it here.<br>
+      Recommended: <a href="https://cobalt.tools" target="_blank" style="color:var(--accent);text-decoration:none;">cobalt.tools</a> — free, no ads, no signup.<br>
+      Paste the YouTube URL → select audio only → download MP3 → upload above.
+    </p>
+  </div>
+</div>
+
+<!-- Step 2: Settings -->
+<div class="card" id="settingsCard">
+  <div class="card-title">02 — Settings</div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tabDictation" onclick="setMode('dictation')">✏️ Dictation</button>
+    <button class="mode-tab" id="tabShadow" onclick="setMode('shadow')">🎤 Shadowing</button>
+  </div>
+
+  <div id="dictationSettings">
+    <div class="controls-row">
+      <div class="ctrl-group">
+        <label class="ctrl-label">Blank density</label>
+        <div class="slider-wrapper">
+          <input type="range" id="blankSlider" min="10" max="80" value="30" step="10">
+          <span class="slider-val" id="blankVal">30%</span>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label class="ctrl-label">Playback speed</label>
+        <select id="speedSelect">
+          <option value="0.75">0.75×</option>
+          <option value="1" selected>1.0×</option>
+          <option value="1.25">1.25×</option>
+          <option value="1.5">1.5×</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div id="shadowSettings" class="hidden">
+    <div class="controls-row">
+      <div class="ctrl-group">
+        <label class="ctrl-label">Playback speed</label>
+        <select id="speedSelectShadow">
+          <option value="0.75">0.75×</option>
+          <option value="1" selected>1.0×</option>
+          <option value="1.25">1.25×</option>
+        </select>
+      </div>
+    </div>
+    <p style="font-size:0.8rem;color:var(--muted);margin-top:12px;line-height:1.6;">Listen to each sentence, then tap the mic and repeat it. Your words are compared to the original text for accuracy scoring.</p>
+  </div>
+
+  <div style="margin-top:16px;">
+    <button class="btn btn-primary" id="startBtn" disabled>Start Practice →</button>
+  </div>
+</div>
+
+<!-- Step 3a: Dictation Practice -->
+<div class="card hidden" id="practiceCard">
+  <div class="card-title">03 — Listen & Fill</div>
+  <div class="audio-row" style="margin-bottom:20px;">
+    <button class="play-btn" id="playBtn">▶</button>
+    <div class="audio-progress"><div class="audio-progress-fill" id="progressFill"></div></div>
+    <span class="audio-time" id="audioTime">0:00 / 0:00</span>
+    <select id="speedSelect2" style="width:auto;padding:6px 10px;">
+      <option value="0.75">0.75×</option>
+      <option value="1" selected>1.0×</option>
+      <option value="1.25">1.25×</option>
+      <option value="1.5">1.5×</option>
+    </select>
+  </div>
+  <div class="dictation-text" id="dictationText"></div>
+  <div class="btn-row">
+    <button class="btn btn-primary" id="checkBtn">Check Answers</button>
+    <button class="btn btn-secondary" id="resetBtn">Reset</button>
+    <button class="btn btn-ghost" id="revealBtn">Reveal All</button>
+  </div>
+</div>
+
+<!-- Step 3b: Shadowing Practice -->
+<div class="card hidden" id="shadowCard">
+  <div class="card-title">03 — Shadow & Repeat</div>
+
+  <div class="no-speech-note" id="speechNote">
+    🎤 This mode uses your browser's built-in speech recognition (Chrome recommended). It scores <strong>word accuracy</strong> — which words you said correctly — not pronunciation quality.
+  </div>
+
+  <div class="audio-row" style="margin-bottom:16px;">
+    <button class="play-btn" id="shadowPlayBtn">▶</button>
+    <div class="audio-progress"><div class="audio-progress-fill" id="shadowProgressFill"></div></div>
+    <span class="audio-time" id="shadowAudioTime">0:00 / 0:00</span>
+  </div>
+
+  <div id="sentenceList"></div>
+
+  <div class="btn-row">
+    <button class="btn btn-purple" id="shadowDoneBtn">See Results</button>
+    <button class="btn btn-ghost" id="shadowBackBtn">← Back</button>
+  </div>
+</div>
+
+<!-- Step 4: Results (dictation) -->
+<div class="card hidden" id="resultsCard">
+  <div class="card-title">04 — Results</div>
+  <div class="score-display">
+    <div class="score-num" id="scoreNum">—</div>
+    <div class="score-label">words correct</div>
+  </div>
+  <div class="section-divider"><hr><span>Mistakes</span><hr></div>
+  <div id="resultsList"></div>
+  <div class="section-divider" style="margin-top:16px;"><hr><span>Full text</span><hr></div>
+  <div class="full-text-reveal" id="fullTextReveal"></div>
+  <div class="btn-row">
+    <button class="btn btn-primary" id="tryAgainBtn">Try Again</button>
+    <button class="btn btn-secondary" id="newFileBtn">New File</button>
+  </div>
+</div>
+
+<!-- Step 4b: Shadow Results -->
+<div class="card hidden" id="shadowResultsCard">
+  <div class="card-title">04 — Shadowing Results</div>
+  <div class="shadow-summary">
+    <div class="big" id="shadowScoreNum">—</div>
+    <div class="score-label">average accuracy</div>
+  </div>
+  <div class="section-divider"><hr><span>Sentence breakdown</span><hr></div>
+  <div id="shadowBreakdown"></div>
+  <div class="btn-row">
+    <button class="btn btn-purple" id="shadowTryAgainBtn">Try Again</button>
+    <button class="btn btn-secondary" id="shadowNewFileBtn">New File</button>
+  </div>
+</div>
+
+<audio id="audioPlayer"></audio>
+<audio id="shadowAudioPlayer"></audio>
+
+<script>
+// ── State ──────────────────────────────────────────────
+let transcriptText = '';
+let blankedIndices = new Set();
+let audioUrl = '';
+let currentMode = 'dictation';
+let sentences = [];       // [{text, words}]
+let sentenceResults = []; // [{score, hit, miss}]
+let recognition = null;
+let activeSentenceIdx = -1;
+
+// ── DOM ────────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+const audioFileInput = document.getElementById('audioFile');
+const fileInfo = document.getElementById('fileInfo');
+const fileNameEl = document.getElementById('fileName');
+const transcribeStatus = document.getElementById('transcribeStatus');
+const transcriptPreview = document.getElementById('transcriptPreview');
+const changeFileBtn = document.getElementById('changeFileBtn');
+const blankSlider = document.getElementById('blankSlider');
+const blankVal = document.getElementById('blankVal');
+const speedSelect = document.getElementById('speedSelect');
+const speedSelect2 = document.getElementById('speedSelect2');
+const startBtn = document.getElementById('startBtn');
+const playBtn = document.getElementById('playBtn');
+const progressFill = document.getElementById('progressFill');
+const audioTime = document.getElementById('audioTime');
+const dictationText = document.getElementById('dictationText');
+const checkBtn = document.getElementById('checkBtn');
+const resetBtn = document.getElementById('resetBtn');
+const revealBtn = document.getElementById('revealBtn');
+const scoreNum = document.getElementById('scoreNum');
+const resultsList = document.getElementById('resultsList');
+const fullTextReveal = document.getElementById('fullTextReveal');
+const tryAgainBtn = document.getElementById('tryAgainBtn');
+const newFileBtn = document.getElementById('newFileBtn');
+const audioPlayer = document.getElementById('audioPlayer');
+const shadowAudioPlayer = document.getElementById('shadowAudioPlayer');
+const shadowPlayBtn = document.getElementById('shadowPlayBtn');
+const shadowProgressFill = document.getElementById('shadowProgressFill');
+const shadowAudioTime = document.getElementById('shadowAudioTime');
+const sentenceList = document.getElementById('sentenceList');
+const shadowDoneBtn = document.getElementById('shadowDoneBtn');
+const shadowBackBtn = document.getElementById('shadowBackBtn');
+const shadowScoreNum = document.getElementById('shadowScoreNum');
+const shadowBreakdown = document.getElementById('shadowBreakdown');
+const shadowTryAgainBtn = document.getElementById('shadowTryAgainBtn');
+const shadowNewFileBtn = document.getElementById('shadowNewFileBtn');
+
+// ── Mode ───────────────────────────────────────────────
+function setMode(m) {
+  currentMode = m;
+  document.getElementById('tabDictation').className = 'mode-tab' + (m==='dictation'?' active':'');
+  document.getElementById('tabShadow').className = 'mode-tab' + (m==='shadow'?' active-purple':'');
+  document.getElementById('dictationSettings').classList.toggle('hidden', m!=='dictation');
+  document.getElementById('shadowSettings').classList.toggle('hidden', m!=='shadow');
+  startBtn.textContent = m==='dictation' ? 'Start Practice →' : 'Start Shadowing →';
+}
+
+// ── Upload ─────────────────────────────────────────────
+dropZone.addEventListener('click', () => audioFileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith('audio/')) handleFile(f); });
+audioFileInput.addEventListener('change', e => { if(e.target.files[0]) handleFile(e.target.files[0]); });
+changeFileBtn.addEventListener('click', () => { audioFileInput.value=''; audioFileInput.click(); });
+
+function handleFile(file) {
+  fileNameEl.textContent = file.name;
+  dropZone.classList.add('hidden');
+  fileInfo.classList.remove('hidden');
+  transcriptPreview.classList.add('hidden');
+  if(audioUrl) URL.revokeObjectURL(audioUrl);
+  audioUrl = URL.createObjectURL(file);
+  audioPlayer.src = audioUrl;
+  shadowAudioPlayer.src = audioUrl;
+  transcribeStatus.innerHTML = '<span class="status-badge status-processing"><span class="spinner"></span> Transcribing…</span>';
+  startBtn.disabled = true;
+  transcribeAudio(file);
+}
+
+async function transcribeAudio(file) {
+  try {
+    const base64 = await fileToBase64(file);
+    const mediaType = file.type || 'audio/mpeg';
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6', max_tokens:1000,
+        messages:[{ role:'user', content:[
+          { type:'text', text:'Transcribe this audio exactly as spoken. Output ONLY the transcription — no labels, no commentary.' },
+          { type:'document', source:{ type:'base64', media_type:mediaType, data:base64 } }
+        ]}]
+      })
+    });
+    const data = await response.json();
+    if(data.error) throw new Error(data.error.message);
+    transcriptText = data.content.find(b=>b.type==='text')?.text?.trim()||'';
+    if(!transcriptText) throw new Error('Empty');
+    transcribeStatus.innerHTML = '<span class="status-badge status-ready">✓ Ready</span>';
+    transcriptPreview.textContent = transcriptText;
+    transcriptPreview.classList.remove('hidden');
+    startBtn.disabled = false;
+  } catch(err) {
+    transcribeStatus.innerHTML = '<span class="status-badge status-error">⚠ Could not auto-transcribe</span>';
+    showManualInput();
+  }
+}
+
+function showManualInput() {
+  if(document.getElementById('manualInputArea')) return;
+  const area = document.createElement('div');
+  area.id = 'manualInputArea'; area.style.marginTop='14px';
+  area.innerHTML = `<label class="ctrl-label">Paste transcript manually:</label>
+    <textarea id="manualText" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:10px;font-family:'Inter',sans-serif;font-size:0.875rem;line-height:1.6;resize:vertical;min-height:80px;outline:none;" placeholder="Type or paste the audio transcript here…"></textarea>
+    <button class="btn btn-secondary" id="useManualBtn" style="margin-top:8px;">Use this text</button>`;
+  document.getElementById('uploadCard').appendChild(area);
+  document.getElementById('useManualBtn').addEventListener('click', () => {
+    const t = document.getElementById('manualText').value.trim();
+    if(!t) return;
+    transcriptText = t;
+    transcribeStatus.innerHTML = '<span class="status-badge status-ready">✓ Ready</span>';
+    transcriptPreview.textContent = t;
+    transcriptPreview.classList.remove('hidden');
+    startBtn.disabled = false;
+    area.remove();
+  });
+}
+
+function fileToBase64(file) {
+  return new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=()=>rej(new Error('Read failed')); r.readAsDataURL(file); });
+}
+
+// ── Settings ───────────────────────────────────────────
+blankSlider.addEventListener('input', () => { blankVal.textContent = blankSlider.value+'%'; });
+speedSelect.addEventListener('change', () => { audioPlayer.playbackRate = parseFloat(speedSelect.value); });
+speedSelect2.addEventListener('change', () => { audioPlayer.playbackRate = parseFloat(speedSelect2.value); });
+startBtn.addEventListener('click', () => { currentMode==='dictation' ? startDictation() : startShadow(); });
+
+// ── DICTATION ──────────────────────────────────────────
+function tokenize(text) { return text.match(/[\w']+|[^\w\s]/g)||[]; }
+function isWord(t) { return /[\w']/.test(t); }
+
+function startDictation() {
+  const density = parseInt(blankSlider.value)/100;
+  const tokens = tokenize(transcriptText);
+  const wordIndices = tokens.map((t,i)=>isWord(t)?i:null).filter(i=>i!==null);
+  const blankCount = Math.round(wordIndices.length*density);
+  const shuffled = [...wordIndices].sort(()=>Math.random()-0.5);
+  blankedIndices = new Set(shuffled.slice(0,blankCount));
+
+  dictationText.innerHTML='';
+  tokens.forEach((token,idx)=>{
+    if(blankedIndices.has(idx)){
+      const span=document.createElement('span'); span.className='word-blank';
+      const inp=document.createElement('input'); inp.type='text'; inp.className='blank-input';
+      inp.dataset.answer=token.toLowerCase(); inp.dataset.original=token;
+      inp.style.width=Math.max(60,token.length*12)+'px';
+      inp.addEventListener('keydown',e=>{ if(e.key==='Enter') focusNext(inp); });
+      span.appendChild(inp); dictationText.appendChild(span);
+    } else {
+      const span=document.createElement('span'); span.className='word-visible';
+      span.textContent=(isWord(token)?' ':'')+token;
+      dictationText.appendChild(span);
+    }
+    if(isWord(token)&&idx<tokens.length-1&&isWord(tokens[idx+1])) dictationText.appendChild(document.createTextNode(' '));
+  });
+
+  show('practiceCard'); hide('settingsCard'); hide('uploadCard'); hide('resultsCard'); hide('shadowCard'); hide('shadowResultsCard');
+  audioPlayer.currentTime=0;
+  const first=dictationText.querySelector('.blank-input'); if(first) first.focus();
+}
+
+function focusNext(current) {
+  const inputs=[...dictationText.querySelectorAll('.blank-input')];
+  const idx=inputs.indexOf(current); if(idx<inputs.length-1) inputs[idx+1].focus();
+}
+
+// Audio player (dictation)
+playBtn.addEventListener('click', ()=>togglePlay(audioPlayer, playBtn));
+function togglePlay(player, btn) {
+  if(player.paused){ player.play(); btn.textContent='⏸'; } else { player.pause(); btn.textContent='▶'; }
+}
+audioPlayer.addEventListener('ended',()=>{ playBtn.textContent='▶'; });
+audioPlayer.addEventListener('timeupdate',()=>{
+  const pct=audioPlayer.duration?(audioPlayer.currentTime/audioPlayer.duration)*100:0;
+  progressFill.style.width=pct+'%';
+  audioTime.textContent=fmt(audioPlayer.currentTime)+' / '+fmt(audioPlayer.duration||0);
+});
+
+checkBtn.addEventListener('click', checkAnswers);
+resetBtn.addEventListener('click', ()=>{ dictationText.querySelectorAll('.blank-input').forEach(inp=>{ inp.value=''; inp.classList.remove('correct','wrong'); }); });
+revealBtn.addEventListener('click', ()=>{ dictationText.querySelectorAll('.blank-input').forEach(inp=>{ inp.value=inp.dataset.original; inp.classList.add('correct'); }); });
+
+function checkAnswers() {
+  const inputs=dictationText.querySelectorAll('.blank-input');
+  let correct=0; const mistakes=[];
+  inputs.forEach(inp=>{
+    const u=inp.value.trim().toLowerCase().replace(/[^\w']/g,'');
+    const c=inp.dataset.answer.toLowerCase().replace(/[^\w']/g,'');
+    if(u===c){ inp.classList.add('correct'); inp.classList.remove('wrong'); correct++; }
+    else { inp.classList.add('wrong'); inp.classList.remove('correct'); mistakes.push({user:inp.value||'(blank)',answer:inp.dataset.original}); }
+  });
+  scoreNum.textContent=correct+' / '+inputs.length;
+  resultsList.innerHTML='';
+  if(mistakes.length===0){ resultsList.innerHTML='<p style="color:var(--correct);font-size:0.875rem;">🎉 Perfect score!</p>'; }
+  else { mistakes.forEach(m=>{ const d=document.createElement('div'); d.className='result-line'; d.innerHTML=`<span class="result-word result-wrong">${escHtml(m.user)}</span><span class="result-arrow">→</span><span class="result-word result-correct">${escHtml(m.answer)}</span>`; resultsList.appendChild(d); }); }
+  fullTextReveal.innerHTML=transcriptText.replace(new RegExp('\\b('+[...blankedIndices].map(i=>tokenize(transcriptText)[i]).map(escRegex).join('|')+')\\b','gi'),'<strong>$1</strong>');
+  show('resultsCard'); document.getElementById('resultsCard').scrollIntoView({behavior:'smooth'});
+}
+
+tryAgainBtn.addEventListener('click', ()=>{ startDictation(); hide('resultsCard'); });
+newFileBtn.addEventListener('click', resetToUpload);
+
+// ── SHADOWING ──────────────────────────────────────────
+function splitSentences(text) {
+  return text.match(/[^.!?]+[.!?]*/g)?.map(s=>s.trim()).filter(s=>s.length>2)||[text];
+}
+
+function startShadow() {
+  sentences = splitSentences(transcriptText).map(s=>({
+    text: s,
+    words: s.toLowerCase().match(/[\w']+/g)||[]
+  }));
+  sentenceResults = sentences.map(()=>null);
+
+  sentenceList.innerHTML='';
+  sentences.forEach((sent,i)=>{
+    const card=document.createElement('div');
+    card.className='sentence-card'; card.id='sent-'+i;
+    card.innerHTML=`
+      <div class="sentence-text">${escHtml(sent.text)}</div>
+      <div class="sentence-controls">
+        <button class="mic-btn" id="mic-${i}" title="Record your voice">🎤</button>
+        <span class="sentence-score-badge" id="score-${i}" style="display:none"></span>
+      </div>
+      <div class="word-chips hidden" id="chips-${i}"></div>
+    `;
+    sentenceList.appendChild(card);
+    document.getElementById('mic-'+i).addEventListener('click',()=>recordSentence(i));
+  });
+
+  show('shadowCard'); hide('settingsCard'); hide('uploadCard'); hide('practiceCard'); hide('resultsCard'); hide('shadowResultsCard');
+  shadowAudioPlayer.currentTime=0;
+}
+
+// Shadow audio player
+shadowPlayBtn.addEventListener('click',()=>togglePlay(shadowAudioPlayer,shadowPlayBtn));
+shadowAudioPlayer.addEventListener('ended',()=>{ shadowPlayBtn.textContent='▶'; });
+shadowAudioPlayer.addEventListener('timeupdate',()=>{
+  const pct=shadowAudioPlayer.duration?(shadowAudioPlayer.currentTime/shadowAudioPlayer.duration)*100:0;
+  shadowProgressFill.style.width=pct+'%';
+  shadowAudioTime.textContent=fmt(shadowAudioPlayer.currentTime)+' / '+fmt(shadowAudioPlayer.duration||0);
+});
+
+function recordSentence(idx) {
+  const SpeechRecognition = window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SpeechRecognition) {
+    alert('Speech recognition is not supported in this browser. Please use Chrome.');
+    return;
+  }
+  if(recognition) { try{ recognition.stop(); }catch(e){} }
+
+  const micBtn = document.getElementById('mic-'+idx);
+  micBtn.classList.add('recording');
+  micBtn.textContent='⏹';
+
+  const card = document.getElementById('sent-'+idx);
+  card.className='sentence-card active';
+
+  recognition = new SpeechRecognition();
+  recognition.lang='en-US'; recognition.interimResults=false; recognition.maxAlternatives=1;
+
+  recognition.onresult = e => {
+    const spoken = e.results[0][0].transcript.toLowerCase();
+    scoreSpoken(idx, spoken);
+  };
+  recognition.onerror = () => {
+    micBtn.classList.remove('recording'); micBtn.textContent='🎤';
+    card.className='sentence-card';
+  };
+  recognition.onend = () => {
+    micBtn.classList.remove('recording'); micBtn.textContent='🔁';
+  };
+  recognition.start();
+}
+
+function scoreSpoken(idx, spoken) {
+  const ref = sentences[idx].words;
+  const spokenWords = spoken.match(/[\w']+/g)||[];
+  const refSet = new Set(ref);
+  const spokenSet = new Set(spokenWords);
+
+  let hits=0;
+  ref.forEach(w=>{ if(spokenSet.has(w)) hits++; });
+  const score = ref.length>0 ? Math.round((hits/ref.length)*100) : 0;
+  sentenceResults[idx] = { score, spoken, ref };
+
+  // Update UI
+  const scoreBadge = document.getElementById('score-'+idx);
+  scoreBadge.style.display='inline-flex';
+  const cls = score>=80?'score-good':score>=50?'score-ok':'score-bad';
+  scoreBadge.className='sentence-score-badge '+cls;
+  scoreBadge.textContent=score+'%';
+
+  const chipsEl = document.getElementById('chips-'+idx);
+  chipsEl.classList.remove('hidden');
+  chipsEl.innerHTML = ref.map(w=>`<span class="chip ${spokenSet.has(w)?'chip-hit':'chip-miss'}">${escHtml(w)}</span>`).join('');
+
+  const card = document.getElementById('sent-'+idx);
+  card.className='sentence-card '+(score>=80?'done-good':'done-ok');
+}
+
+shadowDoneBtn.addEventListener('click', showShadowResults);
+shadowBackBtn.addEventListener('click', ()=>{ show('settingsCard'); show('uploadCard'); hide('shadowCard'); });
+
+function showShadowResults() {
+  const done = sentenceResults.filter(r=>r!==null);
+  const avg = done.length>0 ? Math.round(done.reduce((a,r)=>a+r.score,0)/done.length) : 0;
+  shadowScoreNum.textContent = avg+'%';
+
+  shadowBreakdown.innerHTML='';
+  sentences.forEach((sent,i)=>{
+    const r=sentenceResults[i];
+    const div=document.createElement('div');
+    div.style.cssText='padding:10px 0;border-bottom:1px solid var(--border);font-size:0.85rem;';
+    if(!r){ div.innerHTML=`<span style="color:var(--muted);">${escHtml(sent.text)}</span> <span style="color:var(--muted);font-size:0.75rem;">(not attempted)</span>`; }
+    else {
+      const cls=r.score>=80?'score-good':r.score>=50?'score-ok':'score-bad';
+      div.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><span class="sentence-score-badge ${cls}">${r.score}%</span><span style="color:var(--text);">${escHtml(sent.text)}</span></div>
+        <div style="color:var(--muted);font-size:0.78rem;">You said: <em>${escHtml(r.spoken)}</em></div>`;
+    }
+    shadowBreakdown.appendChild(div);
+  });
+
+  show('shadowResultsCard'); hide('shadowCard');
+  document.getElementById('shadowResultsCard').scrollIntoView({behavior:'smooth'});
+}
+
+shadowTryAgainBtn.addEventListener('click', ()=>{ startShadow(); hide('shadowResultsCard'); });
+shadowNewFileBtn.addEventListener('click', resetToUpload);
+
+// ── Shared utils ───────────────────────────────────────
+function resetToUpload() {
+  transcriptText=''; audioFileInput.value='';
+  dropZone.classList.remove('hidden');
+  fileInfo.classList.add('hidden');
+  transcriptPreview.classList.add('hidden');
+  startBtn.disabled=true;
+  show('uploadCard'); show('settingsCard');
+  hide('practiceCard'); hide('resultsCard'); hide('shadowCard'); hide('shadowResultsCard');
+}
+
+function fmt(s){ const m=Math.floor(s/60),sec=Math.floor(s%60); return m+':'+String(sec).padStart(2,'0'); }
+function show(id){ document.getElementById(id).classList.remove('hidden'); }
+function hide(id){ document.getElementById(id).classList.add('hidden'); }
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escRegex(s){ return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+</script>
+</body>
+</html>
